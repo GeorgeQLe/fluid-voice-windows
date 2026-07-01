@@ -1,0 +1,15 @@
+{
+  "name": "fluid-voice-windows-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "workspaces": [
+    "apps/windows"
+  ],
+  "scripts": {
+    "windows:dev": "npm --workspace apps/windows run tauri dev",
+    "windows:build": "npm --workspace apps/windows run tauri build",
+    "windows:test": "npm --workspace apps/windows run test"
+  }
+}
+

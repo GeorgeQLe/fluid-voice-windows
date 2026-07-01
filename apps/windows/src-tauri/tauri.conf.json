@@ -1,0 +1,49 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FluidVoice",
+  "version": "0.1.0",
+  "identifier": "com.fluidvoice.windows",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "FluidVoice",
+        "width": 1040,
+        "height": 720,
+        "minWidth": 920,
+        "minHeight": 620,
+        "resizable": true,
+        "visible": true
+      },
+      {
+        "label": "overlay",
+        "title": "FluidVoice Overlay",
+        "width": 480,
+        "height": 132,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "transparent": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "category": "Productivity",
+    "shortDescription": "Windows-native FluidVoice dictation",
+    "longDescription": "A Windows-native MVP of FluidVoice focused on local dictation, optional AI enhancement, and text insertion."
+  }
+}
+

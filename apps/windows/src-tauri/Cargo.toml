@@ -1,0 +1,44 @@
+[package]
+name = "fluid-voice-windows"
+version = "0.1.0"
+description = "Windows-native FluidVoice MVP"
+authors = ["FluidVoice Contributors"]
+edition = "2021"
+license = "GPL-3.0-or-later"
+rust-version = "1.78"
+
+[lib]
+name = "fluid_voice_windows_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["clock", "serde"] }
+cpal = "0.15"
+dirs = "5.0"
+futures-util = "0.3"
+keyring = "3.6"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "2.0.0", features = ["tray-icon"] }
+thiserror = "1.0"
+time = "=0.3.36"
+tokio = { version = "1.40", features = ["fs", "io-util", "macros", "rt-multi-thread", "sync", "time"] }
+tracing = "0.1"
+uuid = { version = "1.10", features = ["serde", "v4"] }
+whisper-rs = { version = "0.14", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+  "Win32_Foundation",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging"
+] }
+
+[features]
+default = ["whisper"]
+whisper = ["dep:whisper-rs"]
