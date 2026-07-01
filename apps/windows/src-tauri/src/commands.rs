@@ -11,6 +11,7 @@ use crate::{
 };
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
@@ -233,52 +234,77 @@ pub async fn download_model(
         return Ok(status);
     }
 
-    tokio::fs::create_dir_all(state.models.model_dir())
-        .await
-        .map_err(|error| error.to_string())?;
-
     let target_path = status.path.clone();
     let part_path = target_path.with_extension("part");
-    let response = reqwest::Client::new()
-        .get(&status.model.download_url)
-        .send()
-        .await
-        .map_err(|error| error.to_string())?;
-    let response = response
-        .error_for_status()
-        .map_err(|error| error.to_string())?;
-    let total_bytes = response.content_length();
-    let mut stream = response.bytes_stream();
-    let mut file = tokio::fs::File::create(&part_path)
-        .await
-        .map_err(|error| error.to_string())?;
-    let mut downloaded_bytes = 0_u64;
+    let canceled = state.downloads.start(&model_id)?;
 
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|error| error.to_string())?;
-        downloaded_bytes += chunk.len() as u64;
-        file.write_all(&chunk)
+    let result = async {
+        tokio::fs::create_dir_all(state.models.model_dir())
             .await
             .map_err(|error| error.to_string())?;
-        let _ = app.emit(
-            "model-download-progress",
-            ModelDownloadProgress {
-                model_id: model_id.clone(),
-                downloaded_bytes,
-                total_bytes,
-            },
-        );
+
+        let response = reqwest::Client::new()
+            .get(&status.model.download_url)
+            .send()
+            .await
+            .map_err(|error| error.to_string())?;
+        let response = response
+            .error_for_status()
+            .map_err(|error| error.to_string())?;
+        let total_bytes = response.content_length();
+        let mut stream = response.bytes_stream();
+        let mut file = tokio::fs::File::create(&part_path)
+            .await
+            .map_err(|error| error.to_string())?;
+        let mut downloaded_bytes = 0_u64;
+
+        while let Some(chunk) = stream.next().await {
+            if canceled.load(Ordering::Relaxed) {
+                return Err("model download canceled".to_string());
+            }
+
+            let chunk = chunk.map_err(|error| error.to_string())?;
+            downloaded_bytes += chunk.len() as u64;
+            file.write_all(&chunk)
+                .await
+                .map_err(|error| error.to_string())?;
+            let _ = app.emit(
+                "model-download-progress",
+                ModelDownloadProgress {
+                    model_id: model_id.clone(),
+                    downloaded_bytes,
+                    total_bytes,
+                },
+            );
+        }
+
+        if canceled.load(Ordering::Relaxed) {
+            return Err("model download canceled".to_string());
+        }
+
+        file.flush().await.map_err(|error| error.to_string())?;
+        tokio::fs::rename(&part_path, &target_path)
+            .await
+            .map_err(|error| error.to_string())?;
+
+        state
+            .models
+            .status(&model_id)
+            .map_err(|error| error.to_string())
+    }
+    .await;
+
+    state.downloads.finish(&model_id);
+    if result.is_err() {
+        let _ = tokio::fs::remove_file(&part_path).await;
     }
 
-    file.flush().await.map_err(|error| error.to_string())?;
-    tokio::fs::rename(&part_path, &target_path)
-        .await
-        .map_err(|error| error.to_string())?;
+    result
+}
 
-    state
-        .models
-        .status(&model_id)
-        .map_err(|error| error.to_string())
+#[tauri::command]
+pub fn cancel_model_download(state: State<'_, AppState>, model_id: String) -> Result<bool, String> {
+    state.downloads.cancel(&model_id)
 }
 
 #[tauri::command]
@@ -362,7 +388,6 @@ fn set_overlay_visible(app: &AppHandle, visible: bool) {
     if let Some(window) = app.get_webview_window("overlay") {
         if visible {
             let _ = window.show();
-            let _ = window.set_focus();
         } else {
             let _ = window.hide();
         }

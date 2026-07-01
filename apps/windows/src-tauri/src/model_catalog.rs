@@ -73,7 +73,12 @@ impl ModelCatalog {
         if let Some(id) = id {
             let path = self.model_path(&id)?;
             if path.exists() {
-                fs::remove_file(path)?;
+                fs::remove_file(&path)?;
+            }
+
+            let part_path = path.with_extension("part");
+            if part_path.exists() {
+                fs::remove_file(part_path)?;
             }
             return Ok(());
         }

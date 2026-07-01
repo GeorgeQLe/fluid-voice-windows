@@ -10,9 +10,14 @@ use crate::{
     transcription::WhisperTranscriptionProvider,
 };
 use std::{
+    collections::HashMap,
     path::PathBuf,
-    sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard,
+    },
 };
+use tauri::AppHandle;
 
 pub struct AppState {
     settings: RwLock<AppSettings>,
@@ -25,17 +30,18 @@ pub struct AppState {
     pub hotkeys: HotkeyService,
     pub insertion: TextInsertionService,
     pub secrets: SecretStore,
+    pub downloads: DownloadRegistry,
 }
 
 impl AppState {
-    pub fn new(data_dir: PathBuf) -> Result<Self, String> {
+    pub fn new(data_dir: PathBuf, app_handle: AppHandle) -> Result<Self, String> {
         let settings_store = SettingsStore::new(&data_dir);
         let settings = settings_store
             .load_or_default()
             .map_err(|error| error.to_string())?;
         let models = ModelCatalog::new(&data_dir);
         let transcription = WhisperTranscriptionProvider::new(models.clone());
-        let hotkeys = HotkeyService::default();
+        let hotkeys = HotkeyService::new(app_handle);
         hotkeys
             .apply(&settings.hotkey)
             .map_err(|error| error.to_string())?;
@@ -51,6 +57,7 @@ impl AppState {
             hotkeys,
             insertion: TextInsertionService::default(),
             secrets: SecretStore::default(),
+            downloads: DownloadRegistry::default(),
         })
     }
 
@@ -81,5 +88,47 @@ impl AppState {
         self.settings
             .write()
             .map_err(|_| "settings lock was poisoned".to_string())
+    }
+}
+
+#[derive(Default)]
+pub struct DownloadRegistry {
+    active: Mutex<HashMap<String, Arc<AtomicBool>>>,
+}
+
+impl DownloadRegistry {
+    pub fn start(&self, model_id: &str) -> Result<Arc<AtomicBool>, String> {
+        let mut active = self
+            .active
+            .lock()
+            .map_err(|_| "download registry lock was poisoned".to_string())?;
+
+        if active.contains_key(model_id) {
+            return Err(format!("model download already active: {model_id}"));
+        }
+
+        let canceled = Arc::new(AtomicBool::new(false));
+        active.insert(model_id.to_string(), Arc::clone(&canceled));
+        Ok(canceled)
+    }
+
+    pub fn cancel(&self, model_id: &str) -> Result<bool, String> {
+        let active = self
+            .active
+            .lock()
+            .map_err(|_| "download registry lock was poisoned".to_string())?;
+
+        if let Some(canceled) = active.get(model_id) {
+            canceled.store(true, Ordering::Relaxed);
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
+    pub fn finish(&self, model_id: &str) {
+        if let Ok(mut active) = self.active.lock() {
+            active.remove(model_id);
+        }
     }
 }

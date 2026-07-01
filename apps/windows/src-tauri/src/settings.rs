@@ -282,6 +282,10 @@ fn migrate(mut settings: AppSettings) -> AppSettings {
         settings.history.max_items = HistorySettings::default().max_items;
     }
 
+    if settings.hotkey.mode == HotkeyMode::Hold {
+        settings.hotkey.mode = HotkeyMode::Toggle;
+    }
+
     settings
 }
 

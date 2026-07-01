@@ -25,6 +25,8 @@ export const api = {
     invoke<ModelCacheStatus>("validate_model_cache", { modelId, model_id: modelId }),
   downloadModel: (modelId: string) =>
     invoke<ModelCacheStatus>("download_model", { modelId, model_id: modelId }),
+  cancelModelDownload: (modelId: string) =>
+    invoke<boolean>("cancel_model_download", { modelId, model_id: modelId }),
   clearModelCache: (modelId?: string) =>
     invoke<ModelCacheStatus[]>("clear_model_cache", {
       modelId: modelId ?? null,
@@ -38,4 +40,3 @@ export const api = {
   hasApiKey: (key: string) => invoke<SecretStatus>("has_api_key", { key }),
   deleteApiKey: (key: string) => invoke<SecretStatus>("delete_api_key", { key })
 };
-

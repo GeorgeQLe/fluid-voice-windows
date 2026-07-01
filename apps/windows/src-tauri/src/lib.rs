@@ -11,10 +11,10 @@ mod text_insertion;
 mod transcription;
 
 use commands::{
-    cancel_dictation, clear_history, clear_model_cache, delete_api_key, download_model,
-    finish_dictation, get_app_status, get_recording_snapshot, get_settings, has_api_key,
-    insert_text, list_history, list_input_devices, list_models, save_settings, set_api_key,
-    start_dictation, validate_model_cache,
+    cancel_dictation, cancel_model_download, clear_history, clear_model_cache, delete_api_key,
+    download_model, finish_dictation, get_app_status, get_recording_snapshot, get_settings,
+    has_api_key, insert_text, list_history, list_input_devices, list_models, save_settings,
+    set_api_key, start_dictation, validate_model_cache,
 };
 use state::AppState;
 use std::path::PathBuf;
@@ -39,6 +39,7 @@ pub fn run() {
             list_models,
             validate_model_cache,
             download_model,
+            cancel_model_download,
             clear_model_cache,
             insert_text,
             list_history,
@@ -52,7 +53,8 @@ pub fn run() {
                 .path()
                 .app_data_dir()
                 .unwrap_or_else(|_| fallback_data_dir());
-            let state = AppState::new(data_dir).map_err(anyhow::Error::msg)?;
+            let state =
+                AppState::new(data_dir, app.handle().clone()).map_err(anyhow::Error::msg)?;
             app.manage(state);
             setup_tray(app)?;
             Ok(())

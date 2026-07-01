@@ -18,7 +18,7 @@ import {
   Wand2,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./tauri";
 import type {
   AppSettings,
@@ -57,19 +57,33 @@ function MainView() {
     {}
   );
   const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const statusRef = useRef<AppStatus | null>(null);
+  const busyRef = useRef<string | null>(null);
 
   useEffect(() => {
     void refresh();
-    const unlisten = listen<ModelDownloadProgress>("model-download-progress", (event) => {
+    const unlistenProgress = listen<ModelDownloadProgress>("model-download-progress", (event) => {
       setDownloadProgress((current) => ({
         ...current,
         [event.payload.modelId]: event.payload
       }));
     });
+    const unlistenHotkey = listen("dictation-hotkey-toggle", () => {
+      void handleHotkeyToggle();
+    });
     return () => {
-      void unlisten.then((dispose) => dispose());
+      void unlistenProgress.then((dispose) => dispose());
+      void unlistenHotkey.then((dispose) => dispose());
     };
   }, []);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
 
   async function refresh() {
     setBusy("Refreshing");
@@ -83,6 +97,17 @@ function MainView() {
       setError(errorMessage(caught));
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function handleHotkeyToggle() {
+    const currentStatus = statusRef.current;
+    if (!currentStatus || busyRef.current) return;
+
+    if (currentStatus.recording) {
+      await finishDictation(true);
+    } else {
+      await startDictation();
     }
   }
 
@@ -140,15 +165,42 @@ function MainView() {
   }
 
   async function downloadModel(model: ModelCacheStatus) {
+    const modelId = model.model.id;
     setBusy(`Downloading ${model.model.name}`);
     setError(null);
     try {
-      await api.downloadModel(model.model.id);
+      await api.downloadModel(modelId);
       const models = await api.listModels();
       setStatus((current) => (current ? { ...current, models } : current));
     } catch (caught) {
+      const message = errorMessage(caught);
+      if (message !== "model download canceled") {
+        setError(message);
+      }
+    } finally {
+      setDownloadProgress((current) => {
+        const next = { ...current };
+        delete next[modelId];
+        return next;
+      });
+      setBusy(null);
+    }
+  }
+
+  async function cancelModelDownload(model: ModelCacheStatus) {
+    const modelId = model.model.id;
+    setBusy(`Canceling ${model.model.name}`);
+    setError(null);
+    try {
+      await api.cancelModelDownload(modelId);
+    } catch (caught) {
       setError(errorMessage(caught));
     } finally {
+      setDownloadProgress((current) => {
+        const next = { ...current };
+        delete next[modelId];
+        return next;
+      });
       setBusy(null);
     }
   }
@@ -300,6 +352,7 @@ function MainView() {
             models={status.models}
             progress={downloadProgress}
             onDownload={downloadModel}
+            onCancelDownload={cancelModelDownload}
             onClear={clearModels}
             onSettings={persistSettings}
           />
@@ -423,7 +476,7 @@ function DictationPanel({
             onChange={(event) =>
               onSettings({
                 ...settings,
-                hotkey: { ...settings.hotkey, enabled: event.target.checked }
+                hotkey: { ...settings.hotkey, enabled: event.target.checked, mode: "toggle" }
               })
             }
           />
@@ -436,25 +489,75 @@ function DictationPanel({
             onChange={(event) =>
               onSettings({
                 ...settings,
-                hotkey: { ...settings.hotkey, shortcut: event.target.value }
+                hotkey: { ...settings.hotkey, shortcut: event.target.value, mode: "toggle" }
               })
             }
           />
         </label>
         <div className="segmented">
-          {(["toggle", "hold"] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              className={settings.hotkey.mode === mode ? "selected" : ""}
-              onClick={() =>
-                onSettings({ ...settings, hotkey: { ...settings.hotkey, mode } })
-              }
-            >
-              {capitalize(mode)}
-            </button>
-          ))}
+          <button
+            type="button"
+            className={settings.hotkey.mode === "toggle" ? "selected" : ""}
+            onClick={() =>
+              onSettings({ ...settings, hotkey: { ...settings.hotkey, mode: "toggle" } })
+            }
+          >
+            Toggle
+          </button>
         </div>
+      </section>
+
+      <section className="panel">
+        <PanelHeading icon={Settings} title="Insertion" />
+        <label className="field">
+          <span>Mode</span>
+          <select
+            value={settings.insertion.mode}
+            onChange={(event) =>
+              onSettings({
+                ...settings,
+                insertion: {
+                  ...settings.insertion,
+                  mode: event.target.value as AppSettings["insertion"]["mode"]
+                }
+              })
+            }
+          >
+            <option value="sendInput">SendInput</option>
+            <option value="clipboardFallback">Clipboard paste</option>
+          </select>
+        </label>
+        <label className="toggleLine">
+          <input
+            type="checkbox"
+            checked={settings.insertion.restoreClipboard}
+            onChange={(event) =>
+              onSettings({
+                ...settings,
+                insertion: { ...settings.insertion, restoreClipboard: event.target.checked }
+              })
+            }
+          />
+          <span>Restore clipboard text</span>
+        </label>
+        <label className="field">
+          <span>Typing delay</span>
+          <input
+            type="number"
+            min={0}
+            max={250}
+            value={settings.insertion.typingDelayMs}
+            onChange={(event) =>
+              onSettings({
+                ...settings,
+                insertion: {
+                  ...settings.insertion,
+                  typingDelayMs: Math.max(0, Number(event.target.value) || 0)
+                }
+              })
+            }
+          />
+        </label>
       </section>
 
       {lastResult ? (
@@ -475,6 +578,7 @@ function ModelsPanel({
   models,
   progress,
   onDownload,
+  onCancelDownload,
   onClear,
   onSettings
 }: {
@@ -482,6 +586,7 @@ function ModelsPanel({
   models: ModelCacheStatus[];
   progress: Record<string, ModelDownloadProgress>;
   onDownload: (model: ModelCacheStatus) => Promise<void>;
+  onCancelDownload: (model: ModelCacheStatus) => Promise<void>;
   onClear: (modelId?: string) => Promise<void>;
   onSettings: (settings: AppSettings) => Promise<void>;
 }) {
@@ -494,6 +599,7 @@ function ModelsPanel({
           currentProgress?.totalBytes && currentProgress.totalBytes > 0
             ? Math.round((currentProgress.downloadedBytes / currentProgress.totalBytes) * 100)
             : null;
+        const isDownloading = Boolean(currentProgress);
 
         return (
           <article key={model.model.id} className={active ? "itemCard selectedCard" : "itemCard"}>
@@ -524,11 +630,21 @@ function ModelsPanel({
                 className="secondaryButton"
                 type="button"
                 onClick={() => onDownload(model)}
-                disabled={model.isDownloaded}
+                disabled={model.isDownloaded || isDownloading}
               >
                 <Download size={17} />
-                {percent === null ? "Download" : `${percent}%`}
+                {isDownloading ? (percent === null ? "Downloading" : `${percent}%`) : "Download"}
               </button>
+              {isDownloading ? (
+                <button
+                  className="iconButton danger"
+                  type="button"
+                  title="Cancel download"
+                  onClick={() => onCancelDownload(model)}
+                >
+                  <X size={17} />
+                </button>
+              ) : null}
               <button
                 className="iconButton danger"
                 type="button"
@@ -586,15 +702,17 @@ function EnhancementPanel({
           <span>Provider</span>
           <select
             value={settings.enhancement.provider}
-            onChange={(event) =>
+            onChange={(event) => {
+              const provider = event.target.value as EnhancementProvider;
               onSettings({
                 ...settings,
                 enhancement: {
                   ...settings.enhancement,
-                  provider: event.target.value as EnhancementProvider
+                  provider,
+                  baseUrl: defaultBaseUrlForProvider(provider, settings.enhancement.baseUrl)
                 }
-              })
-            }
+              });
+            }}
           >
             <option value="openAi">OpenAI</option>
             <option value="groq">Groq</option>
@@ -800,10 +918,6 @@ function formatDuration(durationMs: number) {
   return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-function capitalize(value: string) {
-  return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
-}
-
 function secretKeyForProvider(provider: EnhancementProvider) {
   if (provider === "openAi") return "openai";
   if (provider === "groq") return "groq";
@@ -814,6 +928,12 @@ function secretStatusForProvider(status: AppStatus, provider: EnhancementProvide
   if (provider === "openAi") return status.openaiSecret.exists;
   if (provider === "groq") return status.groqSecret.exists;
   return status.customSecret.exists;
+}
+
+function defaultBaseUrlForProvider(provider: EnhancementProvider, current: string) {
+  if (provider === "openAi") return "https://api.openai.com/v1";
+  if (provider === "groq") return "https://api.groq.com/openai/v1";
+  return current;
 }
 
 function labelForPrompt(profile: PromptProfile) {
@@ -828,4 +948,3 @@ function labelForPrompt(profile: PromptProfile) {
       return "Default";
   }
 }
-
