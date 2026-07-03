@@ -15,8 +15,9 @@
 - [x] Add `RegisterHotKey`-based toggle event wiring, clipboard paste fallback with text restoration, model download cancellation, and insertion settings UI.
 - [x] Add the private dogfood MVP PRD, acceptance criteria, known risks, and roadmap.
 - [x] Add repository README and package/Cargo workspace metadata.
+- [x] Make the main Tauri window taskbar-visible and document executable/installer packaging commands.
 
 ## Blockers
 
-- Local Linux Rust validation cannot complete until the host has the desktop development dependencies required by Tauri's Linux stack, specifically `pkg-config` and DBus development headers.
+- Local Linux Rust validation cannot complete until the host has the desktop development dependencies required by Tauri's Linux stack, specifically `pkg-config`, DBus and ALSA development headers, and `libclang`.
 - Windows-specific behavior still needs a real Windows 11 validation pass.

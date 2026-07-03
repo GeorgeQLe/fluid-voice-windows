@@ -10,3 +10,9 @@
 - Added the private dogfood MVP PRD and roadmap under `docs/windows-mvp-prd.md`.
 - Implemented Windows hotkey event registration scaffolding through `RegisterHotKey`, frontend hotkey toggle handling, clipboard paste insertion fallback with text clipboard restoration, model download cancellation, and insertion settings UI.
 - Re-verified TypeScript typecheck, frontend production build, npm audit, and Rust formatting. Rust tests remain blocked on this Linux host by missing `pkg-config`/DBus development dependencies.
+
+## 2026-07-03
+
+- Made the main FluidVoice Tauri window explicitly taskbar-visible while keeping the compact recording overlay off the taskbar.
+- Added root scripts for producing a bare Windows executable and an NSIS installer, and documented the release artifact paths.
+- Verified TypeScript typecheck and frontend production build. Full Tauri dev/build and Rust tests remain blocked on this Linux host by missing `pkg-config`, DBus/ALSA development headers, and `libclang`; Windows executable/installer generation still needs a Windows development shell.

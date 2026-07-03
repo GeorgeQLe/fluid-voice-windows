@@ -4,7 +4,7 @@ Windows-native MVP for FluidVoice using Tauri v2, Rust, React, and TypeScript.
 
 The initial scope is core dictation:
 
-- Tray-hosted Windows desktop app.
+- Taskbar-visible Windows desktop app with tray controls.
 - Settings, model cache, history, and credential storage boundaries.
 - WASAPI/cpal microphone capture with 16 kHz mono PCM conversion.
 - Whisper.cpp-compatible model catalog and cache management.
@@ -27,6 +27,30 @@ apps/windows/src-tauri/    Rust desktop core
 npm install
 npm run windows:dev
 ```
+
+The main FluidVoice window is configured to appear in the Windows taskbar. The compact recording overlay stays off the taskbar.
+
+## Windows packaging
+
+Run these commands from a Windows development shell:
+
+```bash
+npm run windows:exe
+```
+
+This creates the bare app executable at `target/release/fluid-voice-windows.exe`.
+
+```bash
+npm run windows:installer
+```
+
+This creates an NSIS installer executable under `target/release/bundle/nsis/`.
+
+```bash
+npm run windows:build
+```
+
+This creates the configured Windows bundles, currently NSIS and MSI, under `target/release/bundle/`.
 
 ## Verification
 

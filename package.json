@@ -9,7 +9,8 @@
   "scripts": {
     "windows:dev": "npm --workspace apps/windows run tauri dev",
     "windows:build": "npm --workspace apps/windows run tauri build",
+    "windows:exe": "npm --workspace apps/windows run tauri build -- --no-bundle",
+    "windows:installer": "npm --workspace apps/windows run tauri build -- --bundles nsis",
     "windows:test": "npm --workspace apps/windows run test"
   }
 }
-

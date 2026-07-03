@@ -19,6 +19,7 @@
         "minWidth": 920,
         "minHeight": 620,
         "resizable": true,
+        "skipTaskbar": false,
         "visible": true
       },
       {
@@ -46,4 +47,3 @@
     "longDescription": "A Windows-native MVP of FluidVoice focused on local dictation, optional AI enhancement, and text insertion."
   }
 }
-
